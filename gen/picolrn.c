@@ -209,6 +209,192 @@ int load_training_data(char* path)
 	return 1;
 }
 
+int load_training_data_st()
+{
+	N = 0;
+	nbackground = 0;
+	nobjects = 0;
+
+	RNG random_generator(getTickCount());
+	int cnt = 0;
+	string line;
+	//////read pos img from bin.dat
+	FILE* posBin;
+	posBin = fopen("C:\\DATA\\PF_FACE_FRONT_6464.dat", "rb");
+	if (!posBin)
+		return 0;
+	printf("read bin pos\n");
+	while (load_image(&ppixels[N], &pdims[N][1], &pdims[N][0], posBin))
+	{
+		cnt++;
+		printf("cnt = %d\r", cnt);
+		int height = pdims[N][0];
+		int width = pdims[N][1];
+		int r = height / 2, c = width / 2, s = width / 2;
+		objects[nobjects][0] = r;// r
+		objects[nobjects][1] = c;// c
+		objects[nobjects][2] = s;// s
+		objects[nobjects][3] = N; // i
+		++nobjects;
+		++N;
+		Mat_<uchar> oriImg(height,width);
+		memcpy(oriImg.data, ppixels[N-1],sizeof(uint8_t)*width*height);
+		Mat_<uchar> rotateImg(height, width);
+		Point center = Point(r / 2, c / 2);
+		double angle = random_generator.uniform(-5.0f, 5.0f);
+		Mat_<float> rot_mat = getRotationMatrix2D(center, angle, 1.0f);
+		warpAffine(oriImg, rotateImg, rot_mat, rotateImg.size(), 1, 1);
+		////imshow("img1",oriImg);
+		////imshow("img2", rotateImg);
+		float scale = random_generator.uniform(0.35f, 2.0f);
+		Mat_<uchar> resizeImg(height*scale,width*scale);
+		resize(rotateImg,resizeImg,resizeImg.size());
+		////imshow("img3", resizeImg);
+		flip(resizeImg, resizeImg, 1);
+		////imshow("img4", resizeImg);
+		////waitKey(0);
+		ppixels[N] = (uint8_t*)malloc(resizeImg.rows*resizeImg.cols*sizeof(uint8_t));
+		memcpy(ppixels[N], resizeImg.data, sizeof(uint8_t)*resizeImg.rows*resizeImg.cols);
+		pdims[N][0] = resizeImg.rows;
+		pdims[N][1] = resizeImg.cols;
+		objects[nobjects][0] = resizeImg.rows / 2;// r
+		objects[nobjects][1] = resizeImg.cols / 2;// c
+		objects[nobjects][2] = resizeImg.cols / 2;// s
+		objects[nobjects][3] = N; // i
+		++nobjects;
+		++N;
+	}
+	fclose(posBin);
+
+	////read pos img from list.txt
+	ifstream posList;
+	posList.open("C:\\DATA\\CelebA\\crop\\list.txt", iostream::in);
+	printf("read list pos\n");
+	
+	while (getline(posList, line))
+	{
+		cnt++;
+		printf("cnt = %d\r", cnt);
+		istringstream stream(line);
+		string imgpath;
+		stream >> imgpath;
+		Mat_<uchar> oriImg = imread(imgpath, 0); 
+		if (oriImg.empty())
+		{
+			continue;
+		}
+		ppixels[N] = (uint8_t*)malloc(oriImg.rows*oriImg.cols*sizeof(uint8_t));
+		memcpy(ppixels[N], oriImg.data, sizeof(uint8_t)*oriImg.rows*oriImg.cols);
+		pdims[N][0] = oriImg.rows;
+		pdims[N][1] = oriImg.cols;
+		objects[nobjects][0] = oriImg.rows / 2;// r
+		objects[nobjects][1] = oriImg.cols / 2;// c
+		objects[nobjects][2] = oriImg.cols / 2;// s
+		objects[nobjects][3] = N; // i
+		++nobjects;
+		++N;
+	}
+	posList.close();
+	////read neg img from bin.dat
+	ifstream negListBin;
+	negListBin.open("C:\\DATA\\ALL_NOFACE_BIGIMG_TXT_MAX500_RANDSIZE\\list.txt", iostream::in);
+	printf("read neg bin from list\n");
+	while (getline(negListBin, line))
+	{
+		istringstream stream(line);
+		string name;
+		stream >> name;
+		FILE* binFile;
+		binFile = fopen(name.c_str(), "rb");
+		while (load_image(&ppixels[N], &pdims[N][1], &pdims[N][0], binFile))
+		{
+			cnt++;
+			printf("cnt = %d\r", cnt);
+			////1 ori
+			Mat_<uchar> oriImg(pdims[N][0], pdims[N][1]);
+			memcpy(oriImg.data, ppixels[N], sizeof(uint8_t)*pdims[N][0] * pdims[N][1]);
+			////imshow("1", oriImg);
+			background[nbackground] = N;
+			++nbackground;
+			++N;
+			////2 flip
+			flip(oriImg, oriImg, 1);
+			ppixels[N] = (uint8_t*)malloc(oriImg.rows*oriImg.cols*sizeof(uint8_t));
+			memcpy(ppixels[N], oriImg.data, sizeof(uint8_t)*oriImg.rows*oriImg.cols);
+			pdims[N][0] = oriImg.rows;
+			pdims[N][1] = oriImg.cols;
+			
+			background[nbackground] = N;
+			++nbackground;
+			++N;
+			////3 rotate
+			Mat_<uchar> rotateImg = oriImg.clone();
+			Point center = Point(oriImg.cols / 2, oriImg.rows / 2);
+			double angle = random_generator.uniform(0.0f, 360.0f);
+			Mat_<float> rot_mat = getRotationMatrix2D(center, angle, 1.0f);
+			warpAffine(oriImg, rotateImg, rot_mat, rotateImg.size(), 1, 2);
+
+			ppixels[N] = (uint8_t*)malloc(rotateImg.rows*rotateImg.cols*sizeof(uint8_t));
+			memcpy(ppixels[N], rotateImg.data, sizeof(uint8_t)*rotateImg.rows*rotateImg.cols);
+			pdims[N][0] = rotateImg.rows;
+			pdims[N][1] = rotateImg.cols;
+
+			background[nbackground] = N;
+			++nbackground;
+			++N;
+			////4 resize
+			float scale = random_generator.uniform(0.3f, 0.7f);
+			Mat_<uchar> resizeImg(rotateImg.rows*scale, rotateImg.cols*scale);
+			resize(rotateImg, resizeImg, resizeImg.size());
+			flip(resizeImg, resizeImg, -1);
+
+			ppixels[N] = (uint8_t*)malloc(resizeImg.rows*resizeImg.cols*sizeof(uint8_t));
+			memcpy(ppixels[N], resizeImg.data, sizeof(uint8_t)*resizeImg.rows*resizeImg.cols);
+			pdims[N][0] = resizeImg.rows;
+			pdims[N][1] = resizeImg.cols;
+
+			background[nbackground] = N;
+			++nbackground;
+			++N;
+
+			/*imshow("2", oriImg);
+			imshow("3", rotateImg);
+			imshow("4", resizeImg);
+			waitKey(0);*/
+		}
+		fclose(binFile);
+	}
+	negListBin.close();
+	////read neg img from list.txt
+	ifstream negList;
+	printf("read neg from list\n");
+	negList.open("C:\\DATA\\negSample\\list.txt", iostream::in);
+	while (getline(negList, line))
+	{
+		cnt++;
+		printf("cnt = %d\r", cnt);
+		istringstream stream(line);
+		string imgpath;
+		stream >> imgpath;
+		Mat_<uchar> oriImg = imread(imgpath, 0); 
+		if (oriImg.empty())
+		{
+			continue;
+		}
+		ppixels[N] = (uint8_t*)malloc(oriImg.rows*oriImg.cols*sizeof(uint8_t));
+		memcpy(ppixels[N], oriImg.data, sizeof(uint8_t)*oriImg.rows*oriImg.cols);
+		pdims[N][0] = oriImg.rows;
+		pdims[N][1] = oriImg.cols;
+
+		background[nbackground] = N;
+		++nbackground;
+		++N;
+	}
+	negList.close();
+	//
+	return 1;
+}
+
 /*
 	regression trees
 */
