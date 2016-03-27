@@ -306,6 +306,8 @@ int load_training_data_st()
 		stream >> name;
 		FILE* binFile;
 		binFile = fopen(name.c_str(), "rb");
+		if(!binFile)
+			continue;
 		while (load_image(&ppixels[N], &pdims[N][1], &pdims[N][0], binFile))
 		{
 			cnt++;
